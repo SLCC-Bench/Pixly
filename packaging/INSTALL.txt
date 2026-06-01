@@ -1,0 +1,31 @@
+Pixly — Screen to GIF Recorder
+================================
+
+Install
+-------
+1. Drag Pixly.app into the Applications folder.
+2. Open Applications and right-click Pixly → Open (first launch only).
+   macOS may warn that the developer cannot be verified — this is expected
+   for apps built without an Apple Developer ID certificate.
+3. Click Open in the dialog. Later launches work from the Dock or Spotlight.
+
+Permissions (System Settings → Privacy & Security)
+-------------------------------------------------
+• Screen Recording — required to capture the screen
+• Microphone — if you record microphone audio
+• Accessibility — enable **Pixly** (not Terminal/Python) for global ⌘. stop
+  while recording with another app focused. macOS may prompt on first countdown.
+
+System audio (optional)
+-----------------------
+To record speaker output, install BlackHole 2ch and route Mac audio through it.
+See the in-app Audio panel hint or README in the project repo.
+
+MP4 export
+----------
+ffmpeg is bundled via imageio-ffmpeg. No separate install required.
+
+Support
+-------
+Built without Apple notarization. If the app is blocked:
+  xattr -cr /Applications/Pixly.app

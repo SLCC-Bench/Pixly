@@ -1,0 +1,17 @@
+# Screen to GIF Recorder — Python 3.10+
+PyQt6>=6.6.0
+mss>=9.0.1
+Pillow>=10.0.0
+imageio>=2.34.0
+imageio-ffmpeg>=0.5.0
+numpy>=1.24.0
+sounddevice>=0.4.6
+
+# Accurate browser window bounds on macOS (recommended)
+pyobjc-core>=9.2,<12; sys_platform == "darwin"
+pyobjc-framework-Cocoa>=9.2,<12; sys_platform == "darwin"
+pyobjc-framework-Quartz>=9.2,<12; sys_platform == "darwin"
+pyobjc-framework-ApplicationServices>=9.2,<12; sys_platform == "darwin"
+
+# Packaging (dev)
+# pyinstaller>=6.0.0
