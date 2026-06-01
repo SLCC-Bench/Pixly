@@ -66,10 +66,10 @@ def export_gif(
     colors = max_colors if max_colors is not None else quality_to_max_colors(quality)
     colors = max(2, min(256, colors))
 
+    palette_img = _build_shared_palette(selected, colors)
+
     if on_progress:
         on_progress(0, total)
-
-    palette_img = _build_shared_palette(selected, colors)
 
     gif_frames: list[Image.Image] = []
     for i, frame in enumerate(selected):

@@ -39,6 +39,7 @@ class RecordingPreview(QWidget):
         self._scrubbing = False
         self._resume_after_scrub = False
         self._thumb_cache: dict[int, QPixmap] = {}
+        self._controls_locked = False
 
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -183,7 +184,7 @@ class RecordingPreview(QWidget):
         self._timeline.setValue(0)
         self._timeline.blockSignals(False)
 
-        self._set_transport_enabled(True)
+        self._apply_controls_enabled()
         self._btn_play.setText("Play")
         self._update_time_labels()
         self._show_frame(0, update_slider=False)
@@ -192,6 +193,19 @@ class RecordingPreview(QWidget):
         self._playing = False
         self._timer.stop()
         self._btn_play.setText("Play")
+
+    def set_controls_locked(self, locked: bool) -> None:
+        """Disable scrubbing and transport while export is in progress."""
+        self._controls_locked = locked
+        if locked:
+            self.stop()
+        self._apply_controls_enabled()
+
+    def _apply_controls_enabled(self) -> None:
+        has_frames = bool(self._frames)
+        enabled = has_frames and not self._controls_locked
+        self._set_transport_enabled(enabled)
+        self._timeline.setEnabled(enabled and has_frames)
 
     def _set_transport_enabled(self, enabled: bool) -> None:
         self._btn_play.setEnabled(enabled)

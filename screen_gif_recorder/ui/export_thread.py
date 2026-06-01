@@ -37,13 +37,15 @@ class ExportThread(QThread):
 
     def run(self) -> None:
         try:
+            # Copy on the worker thread so the UI can show "Processing" while preparing.
+            frames = [frame.copy() for frame in self._frames]
 
             def report(current: int, tot: int) -> None:
                 self.progress.emit(current, tot)
 
             if self._export_format == "gif":
                 export_gif(
-                    self._frames,
+                    frames,
                     self._output_path,
                     fps=self._fps,
                     quality=self._quality,
@@ -51,7 +53,7 @@ class ExportThread(QThread):
                 )
             else:
                 export_mp4(
-                    self._frames,
+                    frames,
                     self._output_path,
                     fps=self._fps,
                     quality=self._quality,

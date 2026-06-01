@@ -104,6 +104,10 @@ class MainWindow(QMainWindow):
         self._last_audio: AudioCaptureResult | None = None
         self._tracked_window: WindowInfo | None = None
         self._stop_hotkey_accessibility_prompted = False
+        self._export_active = False
+        self._preview_load_timer = QTimer(self)
+        self._preview_load_timer.setSingleShot(True)
+        self._preview_load_timer.timeout.connect(self._finish_preview_load)
 
         self._build_ui()
         self._wire_shortcuts()
@@ -369,6 +373,14 @@ class MainWindow(QMainWindow):
             return 0.5
         return 1.0
 
+    def _finish_preview_load(self) -> None:
+        if not self._last_frames:
+            return
+        fps = float(self._fps_spin.value())
+        self._preview.load_recording(self._last_frames, fps)
+        if not self._export_active:
+            self._set_status(idle=True)
+
     def _set_status(
         self,
         recording: bool = False,
@@ -377,8 +389,12 @@ class MainWindow(QMainWindow):
         exporting: bool = False,
         export_completed: bool = False,
         idle: bool = False,
+        export_detail: str | None = None,
     ) -> None:
+        if idle and self._export_active:
+            return
         if exporting:
+            self._status.setText(export_detail or "Exporting")
             self._status.setObjectName("statusExporting")
         elif export_completed:
             self._status.setText("Export Completed")
@@ -394,29 +410,34 @@ class MainWindow(QMainWindow):
             self._status.setObjectName("statusIdle")
         self._status.style().unpolish(self._status)
         self._status.style().polish(self._status)
+        self._status.update()
 
     def _is_counting_down(self) -> bool:
         return self._countdown_overlay is not None
 
     def _update_button_states(self, recording: bool) -> None:
         counting = self._is_counting_down()
-        self._btn_select.setEnabled(not recording and not counting)
+        locked = self._export_active
+        can_capture = not recording and not counting and not locked
+        self._btn_select.setEnabled(can_capture)
         self._btn_browser.setEnabled(
-            not recording and not counting and macos_window_api_available()
+            can_capture and macos_window_api_available()
         )
-        self._btn_display.setEnabled(not recording and not counting)
+        self._btn_display.setEnabled(can_capture)
         self._btn_start.setEnabled(
-            not recording and not counting and self._capture_region is not None
+            can_capture and self._capture_region is not None
         )
-        self._btn_stop.setEnabled(recording or counting)
+        self._btn_stop.setEnabled((recording or counting) and not locked)
         has_frames = len(self._last_frames) > 0
-        self._btn_save_gif.setEnabled(has_frames and not recording)
-        self._btn_save_mp4.setEnabled(
-            has_frames and not recording and ffmpeg_available()
-        )
-        self._fps_spin.setEnabled(not recording)
-        self._scale_combo.setEnabled(not recording)
-        audio_enabled = not recording and not counting
+        can_export = has_frames and not recording and not counting and not locked
+        self._btn_save_gif.setEnabled(can_export)
+        self._btn_save_mp4.setEnabled(can_export and ffmpeg_available())
+        settings_enabled = not recording and not counting and not locked
+        self._fps_spin.setEnabled(settings_enabled)
+        self._scale_combo.setEnabled(settings_enabled)
+        self._quality_slider.setEnabled(settings_enabled)
+        self._clipboard_check.setEnabled(settings_enabled)
+        audio_enabled = settings_enabled
         for w in (
             self._record_mic,
             self._mute_mic,
@@ -427,6 +448,7 @@ class MainWindow(QMainWindow):
         if audio_enabled and sounddevice_available():
             self._mute_mic.setEnabled(self._record_mic.isChecked())
             self._mute_system.setEnabled(self._record_system.isChecked())
+        self._preview.set_controls_locked(locked)
 
     def _on_record_mic_toggled(self, checked: bool) -> None:
         self._mute_mic.setEnabled(checked and sounddevice_available())
@@ -848,11 +870,8 @@ class MainWindow(QMainWindow):
                 f"{self._region_label.text()}  •  {n} frames (~{dur:.1f}s)"
             )
 
-            def _load_preview() -> None:
-                self._preview.load_recording(frames, fps)
-                self._set_status(idle=True)
-
-            QTimer.singleShot(100, _load_preview)
+            self._preview_load_timer.stop()
+            self._preview_load_timer.start(100)
         else:
             self._set_status(idle=True)
 
@@ -893,17 +912,16 @@ class MainWindow(QMainWindow):
             )
             return
 
+        self._preview_load_timer.stop()
+        self._export_active = True
         self._preview.stop()
         self._set_busy(True)
-        QApplication.processEvents()
-
-        frames_copy = [f.copy() for f in self._last_frames]
         QApplication.processEvents()
 
         audio = self._last_audio if fmt == "mp4" else None
 
         thread = ExportThread(
-            frames_copy,
+            self._last_frames,
             Path(path),
             fmt,
             float(self._fps_spin.value()),
@@ -920,22 +938,22 @@ class MainWindow(QMainWindow):
         thread.start()
 
     def _on_export_progress(self, current: int, total: int) -> None:
-        self._status.setText(f"Exporting {current}/{total}")
-        self._set_status(exporting=True)
+        self._set_status(
+            exporting=True,
+            export_detail=f"Exporting {current}/{total}",
+        )
         QApplication.processEvents()
 
     def _on_export_thread_finished(self) -> None:
         self._export_thread = None
 
     def _set_busy(self, busy: bool) -> None:
-        self._btn_save_gif.setEnabled(not busy and len(self._last_frames) > 0)
-        self._btn_save_mp4.setEnabled(
-            not busy and len(self._last_frames) > 0 and ffmpeg_available()
-        )
         if busy:
             self._set_status(processing=True)
+        self._update_button_states(recording=self._recorder is not None)
 
     def _on_export_done(self, path: str, fmt: str) -> None:
+        self._export_active = False
         self._set_busy(False)
         self._set_status(export_completed=True)
         self._update_button_states(recording=False)
@@ -949,6 +967,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Saved", f"Recording saved to:\n{path}")
 
     def _on_export_failed(self, message: str) -> None:
+        self._export_active = False
         self._set_busy(False)
         self._set_status(idle=True)
         self._update_button_states(recording=False)
